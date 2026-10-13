@@ -1,15 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">음성 투두</string>
-    <string name="interval_label">새 할 일 알림 간격</string>
-    <string name="every_3h">3시간</string>
-    <string name="every_6h">6시간</string>
-    <string name="every_9h">9시간</string>
-    <string name="every_day">하루</string>
+    <string name="interval_label">새 할 일 알림</string>
     <string name="input_hint">직접 입력하거나 🎤 눌러 말하기</string>
     <string name="add">추가</string>
     <string name="speak">눌러서 말하기</string>
     <string name="delete">삭제</string>
     <string name="tts_label">🔊 알림 올 때 소리내어 읽기</string>
-    <string name="empty">아직 할 일이 없어요\n\n🎤 를 누르고 이렇게 말해 보세요\n“3시간마다 물 마시기”\n“매일 영양제 먹기”</string>
+    <string name="empty">아직 할 일이 없어요\n\n🎤 를 누르고 이렇게 말해 보세요\n“30분마다 스트레칭”\n“매일 아침 9시에 영양제 먹기”</string>
+    <string name="preset_label">자주 쓰는 간격</string>
+    <string name="custom_label">직접 설정 (숫자는 눌러서 입력도 가능)</string>
+    <string name="every_suffix">마다</string>
+    <string name="start_label">첫 알림 날짜·시간</string>
+    <string name="pick_start">📅 날짜·시간</string>
+    <string name="reset_start">↺ 등록 시점부터로 되돌리기</string>
+    <string name="change">변경</string>
 </resources>

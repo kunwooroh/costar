@@ -21,7 +21,7 @@ public class ReminderReceiver extends BroadcastReceiver {
         if (Reminders.ACTION_REMIND.equals(action)) {
             if (todo == null || todo.done) return;
             Reminders.showNotification(ctx, todo);
-            Reminders.scheduleNext(ctx, todo);
+            Reminders.scheduleAfterFire(ctx, todo);
             notifyChanged(ctx);
             // 알림과 함께 할 일을 소리내어 읽기
             if (Speaker.isEnabled(ctx) && Speaker.canSpeakNow(ctx)) {

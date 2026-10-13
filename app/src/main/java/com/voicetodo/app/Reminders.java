@@ -20,14 +20,7 @@ public final class Reminders {
     public static final String ACTION_DONE = "com.voicetodo.app.action.DONE";
     public static final String EXTRA_ID = "todo_id";
 
-    public static final int[] INTERVALS = {3, 6, 9, 24};
-    private static final long HOUR = 60L * 60L * 1000L;
-
     private Reminders() {}
-
-    public static String intervalLabel(int hours) {
-        return hours >= 24 ? "하루마다" : hours + "시간마다";
-    }
 
     public static void createChannel(Context ctx) {
         NotificationChannel ch = new NotificationChannel(
@@ -36,9 +29,46 @@ public final class Reminders {
         ctx.getSystemService(NotificationManager.class).createNotificationChannel(ch);
     }
 
-    /** 지금부터 간격만큼 뒤에 다음 알림을 예약. */
-    public static void scheduleNext(Context ctx, Todo todo) {
-        scheduleAt(ctx, todo.id, System.currentTimeMillis() + todo.intervalHours * HOUR);
+    /**
+     * 첫 알림 시각 계산.
+     * startAt == 0 이면 지금부터 간격 뒤, 아니면 startAt (이미 지났으면 간격만큼 건너뛴 다음 시각).
+     */
+    public static long firstTrigger(Interval iv, long startAt, long now) {
+        if (startAt <= 0) {
+            long t = iv.addTo(now);
+            // 초 단위 간격이 아니면 보기 좋게 '분' 단위로 맞춤 (오후 3:30:12 → 오후 3:30)
+            if (!Interval.SEC.equals(iv.unit)) t -= t % 60_000L;
+            return t;
+        }
+        return alignedNext(iv, startAt, now);
+    }
+
+    /** t 부터 간격씩 더해 지금 이후가 되는 첫 시각 (매일 오전 9시 같은 리듬 유지). */
+    public static long alignedNext(Interval iv, long t, long now) {
+        if (t > now) return t;
+        if (Interval.SEC.equals(iv.unit) || Interval.MIN.equals(iv.unit) || Interval.HOUR.equals(iv.unit)) {
+            long step = iv.approxSeconds() * 1000L;   // 고정 길이 간격은 바로 계산
+            long steps = (now - t) / step + 1;
+            return t + steps * step;
+        }
+        long n = t;
+        int guard = 0;
+        while (n <= now && guard++ < 200_000) n = iv.addTo(n);
+        return n > now ? n : iv.addTo(now);
+    }
+
+    /** 새로 등록하거나 간격을 바꿨을 때 첫 알림 예약. 예약된 시각을 돌려줌. */
+    public static long scheduleFirst(Context ctx, Todo todo, long startAt) {
+        long at = firstTrigger(todo.interval, startAt, System.currentTimeMillis());
+        scheduleAt(ctx, todo.id, at);
+        return at;
+    }
+
+    /** 알림이 울린 뒤 다음 알림 예약 (울린 시각 기준으로 리듬 유지). */
+    public static void scheduleAfterFire(Context ctx, Todo todo) {
+        long now = System.currentTimeMillis();
+        long base = todo.nextAt > 0 ? todo.nextAt : now;
+        scheduleAt(ctx, todo.id, alignedNext(todo.interval, todo.interval.addTo(base), now));
     }
 
     public static void scheduleAt(Context ctx, long id, long triggerAt) {
@@ -65,9 +95,12 @@ public final class Reminders {
         for (Todo t : active) {
             if (t.nextAt > now) {
                 scheduleAt(ctx, t.id, t.nextAt);
+            } else if (t.nextAt > 0) {
+                // 꺼져 있는 동안 놓친 알림은 지금 알려주고, 원래 리듬대로 다음 알림 예약
+                showNotification(ctx, t);
+                scheduleAt(ctx, t.id, alignedNext(t.interval, t.nextAt, now));
             } else {
-                // 꺼져 있는 동안 놓친 알림은 1분 뒤에 알려줌
-                scheduleAt(ctx, t.id, now + 60_000L);
+                scheduleAt(ctx, t.id, t.interval.addTo(now));
             }
         }
     }
@@ -92,7 +125,7 @@ public final class Reminders {
                 .setContentTitle("📝 할 일 확인")
                 .setContentText(todo.text)
                 .setStyle(new Notification.BigTextStyle().bigText(todo.text))
-                .setSubText(intervalLabel(todo.intervalHours))
+                .setSubText(todo.interval.label())
                 .setContentIntent(openPi)
                 .addAction(doneAction)
                 .setAutoCancel(true)

@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="22dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="22dp"
+        android:paddingBottom="4dp">
+
+        <TextView
+            style="@style/SectionLabel"
+            android:text="@string/preset_label" />
+
+        <LinearLayout
+            android:id="@+id/preset_container"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="vertical" />
+
+        <TextView
+            style="@style/SectionLabel"
+            android:layout_marginTop="18dp"
+            android:text="@string/custom_label" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <NumberPicker
+                android:id="@+id/picker_amount"
+                android:layout_width="wrap_content"
+                android:layout_height="130dp" />
+
+            <NumberPicker
+                android:id="@+id/picker_unit"
+                android:layout_width="wrap_content"
+                android:layout_height="130dp"
+                android:layout_marginStart="16dp"
+                android:descendantFocusability="blocksDescendants" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:text="@string/every_suffix"
+                android:textColor="@color/text_main"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <TextView
+            style="@style/SectionLabel"
+            android:layout_marginTop="14dp"
+            android:text="@string/start_label" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_card"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="14dp"
+            android:paddingTop="6dp"
+            android:paddingEnd="6dp"
+            android:paddingBottom="6dp">
+
+            <TextView
+                android:id="@+id/start_value"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textColor="@color/text_main"
+                android:textSize="15sp" />
+
+            <Button
+                android:id="@+id/btn_pick_start"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:background="@drawable/bg_button"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:stateListAnimator="@null"
+                android:text="@string/pick_start"
+                android:textColor="@android:color/white"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/btn_reset_start"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:background="?android:attr/selectableItemBackground"
+            android:gravity="center_vertical"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:text="@string/reset_start"
+            android:textColor="@color/brand"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/preview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:background="@drawable/bg_preview"
+            android:lineSpacingExtra="3dp"
+            android:padding="12dp"
+            android:textColor="@color/brand_dark"
+            android:textSize="14sp" />
+    </LinearLayout>
+</ScrollView>

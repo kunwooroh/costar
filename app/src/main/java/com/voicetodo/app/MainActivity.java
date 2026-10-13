@@ -20,7 +20,6 @@ import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.ListView;
-import android.widget.RadioGroup;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -37,7 +36,8 @@ public class MainActivity extends Activity implements TodoAdapter.Listener {
     private TodoAdapter adapter;
     private ListView listView;
     private EditText input;
-    private RadioGroup intervalGroup;
+    private TextView intervalValue;
+    private TextView intervalStart;
     private TextView subtitle;
 
     private final BroadcastReceiver changedReceiver = new BroadcastReceiver() {
@@ -58,7 +58,10 @@ public class MainActivity extends Activity implements TodoAdapter.Listener {
 
         listView = findViewById(R.id.list);
         input = findViewById(R.id.input);
-        intervalGroup = findViewById(R.id.interval_group);
+        intervalValue = findViewById(R.id.interval_value);
+        intervalStart = findViewById(R.id.interval_start);
+        findViewById(R.id.interval_card).setOnClickListener(v -> editDefaultInterval());
+        updateDefaultCard();
         subtitle = findViewById(R.id.subtitle);
 
         adapter = new TodoAdapter(this, this);
@@ -115,7 +118,7 @@ public class MainActivity extends Activity implements TodoAdapter.Listener {
         Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ko-KR");
-        i.putExtra(RecognizerIntent.EXTRA_PROMPT, "할 일을 말하세요\n예) 3시간마다 물 마시기");
+        i.putExtra(RecognizerIntent.EXTRA_PROMPT, "할 일을 말하세요\n예) 30분마다 스트레칭, 매일 아침 9시 약 먹기");
         try {
             startActivityForResult(i, REQ_SPEECH);
         } catch (ActivityNotFoundException e) {
@@ -152,33 +155,36 @@ public class MainActivity extends Activity implements TodoAdapter.Listener {
     private void addTodo(String raw) {
         VoiceParser.Result r = VoiceParser.parse(raw);
         if (r.text.isEmpty()) return;
-        int hours = r.intervalHours > 0 ? r.intervalHours : selectedInterval();
-        if (r.intervalHours > 0) checkInterval(r.intervalHours);
+        Interval iv = r.interval != null ? r.interval : Prefs.defaultInterval(this);
+        // 말에 시각이 있으면 그 시각부터, 없으면 기본 설정(등록 시점 또는 지정 기준 시각)
+        long start = r.startAt > 0 ? r.startAt : Prefs.defaultStart(this);
 
-        long id = db.insert(r.text, hours);
+        long id = db.insert(r.text, iv);
         Todo t = db.getById(id);
-        if (t != null) Reminders.scheduleNext(this, t);
+        long first = t != null ? Reminders.scheduleFirst(this, t, start) : 0;
         refresh();
-        toast("추가: " + r.text + " (" + Reminders.intervalLabel(hours) + ")");
+        toast("추가: " + r.text + "\n" + iv.label() + " · 첫 알림 " + TimeFmt.format(first));
     }
 
-    private int selectedInterval() {
-        int checked = intervalGroup.getCheckedRadioButtonId();
-        if (checked == R.id.interval_3) return 3;
-        if (checked == R.id.interval_9) return 9;
-        if (checked == R.id.interval_24) return 24;
-        return 6;
+    // ---------- 기본 간격 (새 할 일용) ----------
+
+    private void editDefaultInterval() {
+        IntervalDialog.show(this, "새 할 일 알림 간격", Prefs.defaultInterval(this),
+                Prefs.defaultStart(this), "등록하는 순간부터",
+                (iv, start) -> {
+                    Prefs.setDefault(this, iv, start);
+                    updateDefaultCard();
+                    toast("새 할 일은 " + iv.label() + " 알려드릴게요");
+                });
     }
 
-    private void checkInterval(int hours) {
-        int id;
-        switch (hours) {
-            case 3: id = R.id.interval_3; break;
-            case 9: id = R.id.interval_9; break;
-            case 24: id = R.id.interval_24; break;
-            default: id = R.id.interval_6; break;
-        }
-        intervalGroup.check(id);
+    private void updateDefaultCard() {
+        Interval iv = Prefs.defaultInterval(this);
+        long start = Prefs.defaultStart(this);
+        intervalValue.setText("🔔 " + iv.label());
+        intervalStart.setText(start > 0
+                ? "기준 시각 " + TimeFmt.format(start) + " (이 리듬에 맞춰 알림)"
+                : "등록한 순간부터 계산 · 눌러서 간격·날짜·시간 변경");
     }
 
     // ---------- 목록 동작 ----------
@@ -190,7 +196,7 @@ public class MainActivity extends Activity implements TodoAdapter.Listener {
             Reminders.cancel(this, todo.id);
         } else {
             Todo fresh = db.getById(todo.id);
-            if (fresh != null) Reminders.scheduleNext(this, fresh);
+            if (fresh != null) Reminders.scheduleFirst(this, fresh, 0);
         }
         listView.post(this::refresh);
     }
@@ -211,25 +217,15 @@ public class MainActivity extends Activity implements TodoAdapter.Listener {
 
     @Override
     public void onEditInterval(Todo todo) {
-        int[] values = Reminders.INTERVALS;
-        String[] labels = new String[values.length];
-        int current = 1;
-        for (int i = 0; i < values.length; i++) {
-            labels[i] = Reminders.intervalLabel(values[i]);
-            if (values[i] == todo.intervalHours) current = i;
-        }
-        new AlertDialog.Builder(this)
-                .setTitle("알림 간격 변경")
-                .setSingleChoiceItems(labels, current, (d, which) -> {
-                    db.setInterval(todo.id, values[which]);
+        IntervalDialog.show(this, "알림 간격 변경", todo.interval, todo.nextAt, "지금부터",
+                (iv, start) -> {
+                    db.setInterval(todo.id, iv);
                     Todo fresh = db.getById(todo.id);
-                    if (fresh != null) Reminders.scheduleNext(this, fresh);
+                    if (fresh == null) return;
+                    long first = Reminders.scheduleFirst(this, fresh, start);
                     refresh();
-                    d.dismiss();
-                    toast("지금부터 " + labels[which] + " 알려드릴게요");
-                })
-                .setNegativeButton("취소", null)
-                .show();
+                    toast(iv.label() + " · 다음 알림 " + TimeFmt.format(first));
+                });
     }
 
     @Override

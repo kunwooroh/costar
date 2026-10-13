@@ -10,11 +10,8 @@ import android.widget.CheckBox;
 import android.widget.ImageButton;
 import android.widget.TextView;
 
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.List;
-import java.util.Locale;
 
 /** 할 일 목록 한 줄씩 그리기. */
 public class TodoAdapter extends BaseAdapter {
@@ -30,9 +27,6 @@ public class TodoAdapter extends BaseAdapter {
     private final LayoutInflater inflater;
     private final Listener listener;
     private List<Todo> items = new ArrayList<>();
-
-    private final SimpleDateFormat timeFmt = new SimpleDateFormat("a h:mm", Locale.KOREA);
-    private final SimpleDateFormat dayTimeFmt = new SimpleDateFormat("M월 d일 a h:mm", Locale.KOREA);
 
     public TodoAdapter(Context ctx, Listener listener) {
         this.inflater = LayoutInflater.from(ctx);
@@ -67,8 +61,8 @@ public class TodoAdapter extends BaseAdapter {
         } else {
             text.setPaintFlags(text.getPaintFlags() & ~Paint.STRIKE_THRU_TEXT_FLAG);
             text.setAlpha(1f);
-            String label = "🔔 " + Reminders.intervalLabel(t.intervalHours);
-            if (t.nextAt > 0) label += " · 다음 " + formatTime(t.nextAt);
+            String label = "🔔 " + t.interval.label();
+            if (t.nextAt > 0) label += " · 다음 " + TimeFmt.format(t.nextAt);
             meta.setText(label);
         }
 
@@ -84,14 +78,5 @@ public class TodoAdapter extends BaseAdapter {
             return true;
         });
         return v;
-    }
-
-    private String formatTime(long millis) {
-        Calendar now = Calendar.getInstance();
-        Calendar c = Calendar.getInstance();
-        c.setTimeInMillis(millis);
-        boolean sameDay = now.get(Calendar.YEAR) == c.get(Calendar.YEAR)
-                && now.get(Calendar.DAY_OF_YEAR) == c.get(Calendar.DAY_OF_YEAR);
-        return sameDay ? timeFmt.format(c.getTime()) : dayTimeFmt.format(c.getTime());
     }
 }

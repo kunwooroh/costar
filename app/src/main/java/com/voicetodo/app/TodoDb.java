@@ -13,7 +13,8 @@ import java.util.List;
 public class TodoDb extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "voice_todo.db";
-    private static final int DB_VERSION = 1;
+    /** v2: 간격을 숫자+단위(interval_amount, interval_unit)로 저장 */
+    private static final int DB_VERSION = 2;
     private static final String T = "todos";
 
     private static TodoDb instance;
@@ -34,30 +35,39 @@ public class TodoDb extends SQLiteOpenHelper {
         db.execSQL("CREATE TABLE " + T + " ("
                 + "id INTEGER PRIMARY KEY AUTOINCREMENT, "
                 + "text TEXT NOT NULL, "
-                + "interval_hours INTEGER NOT NULL, "
+                + "interval_hours INTEGER NOT NULL DEFAULT 0, "   // v1 호환용 (사용 안 함)
                 + "done INTEGER NOT NULL DEFAULT 0, "
                 + "created_at INTEGER NOT NULL, "
-                + "next_at INTEGER NOT NULL DEFAULT 0)");
+                + "next_at INTEGER NOT NULL DEFAULT 0, "
+                + "interval_amount INTEGER NOT NULL DEFAULT 6, "
+                + "interval_unit TEXT NOT NULL DEFAULT 'HOUR')");
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        // 버전 1 뿐이라 아직 마이그레이션 없음
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE " + T + " ADD COLUMN interval_amount INTEGER NOT NULL DEFAULT 6");
+            db.execSQL("ALTER TABLE " + T + " ADD COLUMN interval_unit TEXT NOT NULL DEFAULT 'HOUR'");
+            db.execSQL("UPDATE " + T + " SET interval_amount = interval_hours, interval_unit = 'HOUR'");
+        }
     }
 
-    public long insert(String text, int intervalHours) {
+    public long insert(String text, Interval interval) {
         ContentValues v = new ContentValues();
         v.put("text", text);
-        v.put("interval_hours", intervalHours);
+        v.put("interval_hours", (int) Math.max(1, interval.approxSeconds() / 3600));
+        v.put("interval_amount", interval.amount);
+        v.put("interval_unit", interval.unit);
         v.put("done", 0);
         v.put("created_at", System.currentTimeMillis());
         v.put("next_at", 0);
         return getWritableDatabase().insert(T, null, v);
     }
 
-    /** 미완료 먼저, 그 안에서는 최근 추가 순. */
+    /** 미완료 먼저, 그 안에서는 다음 알림이 빠른 순. */
     public List<Todo> getAll() {
-        return query(null, null, "done ASC, created_at DESC");
+        return query(null, null,
+                "done ASC, CASE WHEN next_at = 0 THEN 1 ELSE 0 END, next_at ASC, created_at DESC");
     }
 
     public List<Todo> getActive() {
@@ -76,9 +86,11 @@ public class TodoDb extends SQLiteOpenHelper {
         update(id, v);
     }
 
-    public void setInterval(long id, int intervalHours) {
+    public void setInterval(long id, Interval interval) {
         ContentValues v = new ContentValues();
-        v.put("interval_hours", intervalHours);
+        v.put("interval_hours", (int) Math.max(1, interval.approxSeconds() / 3600));
+        v.put("interval_amount", interval.amount);
+        v.put("interval_unit", interval.unit);
         update(id, v);
     }
 
@@ -99,16 +111,16 @@ public class TodoDb extends SQLiteOpenHelper {
     private List<Todo> query(String where, String[] args, String orderBy) {
         List<Todo> out = new ArrayList<>();
         try (Cursor c = getReadableDatabase().query(T,
-                new String[]{"id", "text", "interval_hours", "done", "created_at", "next_at"},
+                new String[]{"id", "text", "interval_amount", "interval_unit", "done", "created_at", "next_at"},
                 where, args, null, null, orderBy)) {
             while (c.moveToNext()) {
                 out.add(new Todo(
                         c.getLong(0),
                         c.getString(1),
-                        c.getInt(2),
-                        c.getInt(3) == 1,
-                        c.getLong(4),
-                        c.getLong(5)));
+                        Interval.of(c.getInt(2), c.getString(3)),
+                        c.getInt(4) == 1,
+                        c.getLong(5),
+                        c.getLong(6)));
             }
         }
         return out;
