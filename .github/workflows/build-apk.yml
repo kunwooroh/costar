@@ -1,0 +1,45 @@
+name: Build APK
+
+on:
+  push:
+    branches: [voice-todo-app]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Build APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk VoiceTodo.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VoiceTodo-apk
+          path: VoiceTodo.apk
+
+      # 휴대폰에서 바로 받을 수 있게 Releases 에 APK 올리기
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="voice-todo-v1.0.${{ github.run_number }}"
+          gh release create "$TAG" VoiceTodo.apk \
+            --title "음성 투두 $TAG" \
+            --notes "휴대폰에서 아래 VoiceTodo.apk 를 눌러 받은 뒤 설치하세요." \
+            --target "${{ github.sha }}" \
+            --latest=false
