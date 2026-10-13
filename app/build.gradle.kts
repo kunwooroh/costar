@@ -10,8 +10,8 @@ android {
         applicationId = "com.voicetodo.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
     }
 
     // 개인 설치용 고정 서명 키: 빌드마다 같은 키라서 새 버전을 기존 앱 위에 바로 업데이트 설치 가능

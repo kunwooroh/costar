@@ -6,6 +6,7 @@ import android.app.DatePickerDialog;
 import android.app.TimePickerDialog;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.NumberPicker;
@@ -26,7 +27,8 @@ import java.util.List;
 public final class IntervalDialog {
 
     public interface Callback {
-        void onSave(Interval interval, long startAt);
+        /** once=true 면 한 번만 알림 (interval 은 '얼마 뒤') */
+        void onSave(Interval interval, long startAt, boolean once);
     }
 
     private static final String[] UNITS = {
@@ -52,6 +54,8 @@ public final class IntervalDialog {
     private NumberPicker unitPicker;
     private TextView startValue;
     private TextView preview;
+    private TextView suffix;
+    private CheckBox onceCheck;
     private long startAt;
 
     private IntervalDialog(Activity act, String startEmptyLabel) {
@@ -63,17 +67,21 @@ public final class IntervalDialog {
      * @param startAt 처음 보여줄 첫 알림 시각 (0 = 등록 시점부터 / 지금부터)
      * @param startEmptyLabel startAt 이 0 일 때 표시할 문구
      */
-    public static void show(Activity act, String title, Interval current, long startAt,
+    public static void show(Activity act, String title, Interval current, boolean once, long startAt,
                             String startEmptyLabel, Callback cb) {
-        new IntervalDialog(act, startEmptyLabel).open(title, current, startAt, cb);
+        new IntervalDialog(act, startEmptyLabel).open(title, current, once, startAt, cb);
     }
 
-    private void open(String title, Interval current, long initialStart, Callback cb) {
+    private void open(String title, Interval current, boolean once, long initialStart, Callback cb) {
         View v = act.getLayoutInflater().inflate(R.layout.dialog_interval, null);
         amountPicker = v.findViewById(R.id.picker_amount);
         unitPicker = v.findViewById(R.id.picker_unit);
         startValue = v.findViewById(R.id.start_value);
         preview = v.findViewById(R.id.preview);
+        suffix = v.findViewById(R.id.suffix);
+        onceCheck = v.findViewById(R.id.check_once);
+        onceCheck.setChecked(once);
+        onceCheck.setOnCheckedChangeListener((b, c) -> onChanged());
         startAt = initialStart;
 
         buildPresets(v.findViewById(R.id.preset_container));
@@ -110,7 +118,7 @@ public final class IntervalDialog {
                 .setView(v)
                 .setPositiveButton("저장", (d, w) -> {
                     amountPicker.clearFocus();   // 입력 중인 숫자 확정
-                    cb.onSave(currentInterval(), startAt);
+                    cb.onSave(currentInterval(), startAt, onceCheck.isChecked());
                 })
                 .setNegativeButton("취소", null)
                 .show();
@@ -200,11 +208,19 @@ public final class IntervalDialog {
 
     private void onChanged() {
         Interval iv = currentInterval();
+        boolean once = onceCheck.isChecked();
         for (int i = 0; i < chips.size(); i++) chips.get(i).setSelected(PRESETS[i].equals(iv));
+        suffix.setText(once ? "뒤에" : "마다");
 
         startValue.setText(startAt > 0 ? TimeFmt.format(startAt) : startEmptyLabel);
 
         long now = System.currentTimeMillis();
+        if (once) {
+            long at = Reminders.firstTrigger(true, iv, startAt, now);
+            preview.setText("⏰ 한 번만 알림\n알림 시각  " + TimeFmt.format(at)
+                    + (startAt > now ? "\n(날짜·시간을 지정해서 위 간격은 쓰지 않아요)" : ""));
+            return;
+        }
         long first = Reminders.firstTrigger(iv, startAt, now);
         long second = iv.addTo(first);
         long third = iv.addTo(second);

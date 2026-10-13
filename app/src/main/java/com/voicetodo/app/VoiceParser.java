@@ -11,7 +11,12 @@ import java.util.regex.Pattern;
  *     "보고서 쓰기 여섯 시간마다 알려줘"   → 6시간마다, "보고서 쓰기"
  *     "매일 아침 9시에 영양제 먹기"        → 매일, 첫 알림 오전 9:00, "영양제 먹기"
  *     "두 달마다 정수기 필터 교체"         → 2개월마다
- *     "내일 오후 3시 은행 가기"            → (기본 간격), 첫 알림 내일 오후 3:00
+ *     "내일 오후 3시 은행 가기"            → 한 번만, 내일 오후 3:00
+ *     "하루 있다가 알려줘"                 → 한 번만, 지금부터 24시간 뒤
+ *     "30분 뒤에 빨래 꺼내기"              → 한 번만, 30분 뒤
+ *     "1시간 뒤부터 30분마다 물 마시기"     → 30분마다, 첫 알림 1시간 뒤
+ *
+ * 규칙: '~마다'가 있으면 반복, '~뒤/후/있다가'나 시각만 있으면 한 번만 알림.
  */
 public final class VoiceParser {
 
@@ -19,13 +24,21 @@ public final class VoiceParser {
         public final String text;
         /** 문장에 간격이 없으면 null */
         public final Interval interval;
-        /** 문장에 시각이 없으면 0 */
+        /** 문장에 시각·지연이 없으면 0 */
         public final long startAt;
+        /** "30분 뒤" 같은 지연 길이 (없으면 null) */
+        public final Interval delay;
 
-        Result(String text, Interval interval, long startAt) {
+        Result(String text, Interval interval, long startAt, Interval delay) {
             this.text = text;
             this.interval = interval;
             this.startAt = startAt;
+            this.delay = delay;
+        }
+
+        /** 반복 없이 한 번만 알릴지 */
+        public boolean once() {
+            return interval == null && startAt > 0;
         }
     }
 
@@ -41,6 +54,19 @@ public final class VoiceParser {
     private static final Pattern WEEKLY = Pattern.compile("매주|주마다|일주일\\s*(마다|에\\s*한\\s*번씩?|에\\s*한번씩?)");
     private static final Pattern MONTHLY = Pattern.compile("매달|매월|달마다|한\\s*달\\s*(마다|에\\s*한\\s*번씩?|에\\s*한번씩?)");
     private static final Pattern HOURLY = Pattern.compile("매\\s*시간|(?<![0-9가-힣])시간마다");
+
+    private static final String AFTER =
+            "\\s*(뒤|후|있다가|있다|이따가?|지나서|지나면)\\s*(에는|에|부터)?";
+
+    /** "30분 뒤에", "2시간 반 후", "3일 있다가", "한 달 지나서" */
+    private static final Pattern DELAY_NUM = Pattern.compile(
+            "(?<![0-9])" + NUM + "\\s*(초|분|시간|일|주일|주|개월|달)(\\s*반)?" + AFTER);
+    /** "하루 있다가", "이틀 뒤", "일주일 후", "반나절 뒤", "조금 있다가" */
+    private static final Pattern DELAY_WORD = Pattern.compile(
+            "(하루|이틀|사흘|나흘|일주일|반나절|조금|잠깐|잠시)" + AFTER);
+    /** 시각 없이 "내일", "모레 아침" */
+    private static final Pattern DAY_ONLY = Pattern.compile(
+            "(내일|모레)\\s*(아침|오전|낮|오후|저녁|밤)?\\s*(에|쯤)?");
 
     /** "내일 오후 3시 30분에", "아침 9시", "저녁 7시 반부터" */
     private static final Pattern TIME = Pattern.compile(
@@ -58,11 +84,38 @@ public final class VoiceParser {
     }
 
     public static Result parse(String raw, Calendar now) {
-        if (raw == null) return new Result("", null, 0);
+        if (raw == null) return new Result("", null, 0, null);
         String s = raw.trim();
         Interval interval = null;
+        Interval delay = null;
+        long startAt = 0;
 
-        Matcher m = NUM_INTERVAL.matcher(s);
+        // 1) "30분 뒤", "하루 있다가" → 지연
+        Matcher m = DELAY_NUM.matcher(s);
+        if (m.find()) {
+            int n = toNumber(m.group(1));
+            String unit = toUnit(m.group(2));
+            if (m.group(3) != null && Interval.HOUR.equals(unit)) {   // "2시간 반"
+                delay = Interval.of(n * 60 + 30, Interval.MIN);
+            } else if (m.group(3) != null && Interval.MIN.equals(unit)) {
+                delay = Interval.of(n * 60 + 30, Interval.SEC);
+            } else {
+                delay = Interval.of(n, unit);
+            }
+            s = remove(s, m);
+        } else if ((m = DELAY_WORD.matcher(s)).find()) {
+            delay = wordDelay(m.group(1));
+            s = remove(s, m);
+        }
+        if (delay != null) {
+            long at = delay.addTo(now.getTimeInMillis());
+            if (!Interval.SEC.equals(delay.unit)) at -= at % 60_000L;   // 분 단위로 정리
+            else at -= at % 1000L;
+            startAt = at;
+        }
+
+        // 2) "30분마다", "매일" → 반복 간격
+        m = NUM_INTERVAL.matcher(s);
         if (m.find()) {
             interval = Interval.of(toNumber(m.group(1)), toUnit(m.group(2)));
             s = remove(s, m);
@@ -80,11 +133,16 @@ public final class VoiceParser {
             s = remove(s, m);
         }
 
-        long startAt = 0;
-        Matcher t = TIME.matcher(s);
-        if (t.find()) {
-            startAt = toStart(t, now);
-            s = remove(s, t);
+        // 3) "아침 9시", "내일 오후 3시" → 시각 (지연이 없을 때만)
+        if (startAt == 0) {
+            Matcher t = TIME.matcher(s);
+            if (t.find()) {
+                startAt = toStart(t, now);
+                s = remove(s, t);
+            } else if ((t = DAY_ONLY.matcher(s)).find()) {
+                startAt = dayOnly(t, now);
+                s = remove(s, t);
+            }
         }
 
         if (interval != null || startAt > 0) {
@@ -92,8 +150,43 @@ public final class VoiceParser {
             s = s.replaceAll("^[\\s,]*(에|로|으로|부터)?[\\s,]+", "").replaceAll("[\\s,]+$", "");
         }
         s = s.replaceAll("\\s{2,}", " ").trim();
-        if (s.isEmpty()) s = raw.trim();
-        return new Result(s, interval, startAt);
+        if (s.isEmpty()) s = (interval != null || startAt > 0) ? "알림" : raw.trim();
+        return new Result(s, interval, startAt, delay);
+    }
+
+    private static Interval wordDelay(String w) {
+        switch (w) {
+            case "하루": return Interval.of(1, Interval.DAY);
+            case "이틀": return Interval.of(2, Interval.DAY);
+            case "사흘": return Interval.of(3, Interval.DAY);
+            case "나흘": return Interval.of(4, Interval.DAY);
+            case "일주일": return Interval.of(1, Interval.WEEK);
+            case "반나절": return Interval.of(6, Interval.HOUR);
+            default: return Interval.of(10, Interval.MIN);   // 조금/잠깐/잠시
+        }
+    }
+
+    /** "내일" → 내일 오전 9시, "내일 저녁" → 내일 저녁 7시 */
+    private static long dayOnly(Matcher t, Calendar now) {
+        int offset = "모레".equals(t.group(1)) ? 2 : 1;
+        String period = t.group(2);
+        int hour = 9;
+        if (period != null) {
+            switch (period) {
+                case "낮": hour = 12; break;
+                case "오후": hour = 15; break;
+                case "저녁": hour = 19; break;
+                case "밤": hour = 21; break;
+                default: hour = 9; break;
+            }
+        }
+        Calendar c = (Calendar) now.clone();
+        c.add(Calendar.DAY_OF_MONTH, offset);
+        c.set(Calendar.HOUR_OF_DAY, hour);
+        c.set(Calendar.MINUTE, 0);
+        c.set(Calendar.SECOND, 0);
+        c.set(Calendar.MILLISECOND, 0);
+        return c.getTimeInMillis();
     }
 
     private static long toStart(Matcher t, Calendar now) {

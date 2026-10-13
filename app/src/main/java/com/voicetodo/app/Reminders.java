@@ -57,15 +57,26 @@ public final class Reminders {
         return n > now ? n : iv.addTo(now);
     }
 
+    /** 한 번만 알림: 지정 시각이 미래면 그 시각, 아니면 지금부터 interval 뒤. */
+    public static long firstTrigger(boolean once, Interval iv, long startAt, long now) {
+        if (once && startAt > now) return startAt;
+        if (once) return firstTrigger(iv, 0, now);
+        return firstTrigger(iv, startAt, now);
+    }
+
     /** 새로 등록하거나 간격을 바꿨을 때 첫 알림 예약. 예약된 시각을 돌려줌. */
     public static long scheduleFirst(Context ctx, Todo todo, long startAt) {
-        long at = firstTrigger(todo.interval, startAt, System.currentTimeMillis());
+        long at = firstTrigger(todo.once, todo.interval, startAt, System.currentTimeMillis());
         scheduleAt(ctx, todo.id, at);
         return at;
     }
 
-    /** 알림이 울린 뒤 다음 알림 예약 (울린 시각 기준으로 리듬 유지). */
+    /** 알림이 울린 뒤 다음 알림 예약 (울린 시각 기준으로 리듬 유지). 한 번만 알림이면 끝. */
     public static void scheduleAfterFire(Context ctx, Todo todo) {
+        if (todo.once) {
+            TodoDb.get(ctx).setNextAt(todo.id, 0);
+            return;
+        }
         long now = System.currentTimeMillis();
         long base = todo.nextAt > 0 ? todo.nextAt : now;
         scheduleAt(ctx, todo.id, alignedNext(todo.interval, todo.interval.addTo(base), now));
@@ -96,10 +107,14 @@ public final class Reminders {
             if (t.nextAt > now) {
                 scheduleAt(ctx, t.id, t.nextAt);
             } else if (t.nextAt > 0) {
-                // 꺼져 있는 동안 놓친 알림은 지금 알려주고, 원래 리듬대로 다음 알림 예약
+                // 꺼져 있는 동안 놓친 알림은 지금 알려주고, 반복이면 원래 리듬대로 다음 알림 예약
                 showNotification(ctx, t);
-                scheduleAt(ctx, t.id, alignedNext(t.interval, t.nextAt, now));
-            } else {
+                if (t.once) {
+                    TodoDb.get(ctx).setNextAt(t.id, 0);
+                } else {
+                    scheduleAt(ctx, t.id, alignedNext(t.interval, t.nextAt, now));
+                }
+            } else if (!t.once) {
                 scheduleAt(ctx, t.id, t.interval.addTo(now));
             }
         }
@@ -125,7 +140,7 @@ public final class Reminders {
                 .setContentTitle("📝 할 일 확인")
                 .setContentText(todo.text)
                 .setStyle(new Notification.BigTextStyle().bigText(todo.text))
-                .setSubText(todo.interval.label())
+                .setSubText(todo.scheduleLabel())
                 .setContentIntent(openPi)
                 .addAction(doneAction)
                 .setAutoCancel(true)

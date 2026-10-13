@@ -13,8 +13,8 @@ import java.util.List;
 public class TodoDb extends SQLiteOpenHelper {
 
     private static final String DB_NAME = "voice_todo.db";
-    /** v2: 간격을 숫자+단위(interval_amount, interval_unit)로 저장 */
-    private static final int DB_VERSION = 2;
+    /** v2: 간격을 숫자+단위로 저장, v3: 한 번만 알림(once) */
+    private static final int DB_VERSION = 3;
     private static final String T = "todos";
 
     private static TodoDb instance;
@@ -40,7 +40,8 @@ public class TodoDb extends SQLiteOpenHelper {
                 + "created_at INTEGER NOT NULL, "
                 + "next_at INTEGER NOT NULL DEFAULT 0, "
                 + "interval_amount INTEGER NOT NULL DEFAULT 6, "
-                + "interval_unit TEXT NOT NULL DEFAULT 'HOUR')");
+                + "interval_unit TEXT NOT NULL DEFAULT 'HOUR', "
+                + "once INTEGER NOT NULL DEFAULT 0)");
     }
 
     @Override
@@ -50,14 +51,18 @@ public class TodoDb extends SQLiteOpenHelper {
             db.execSQL("ALTER TABLE " + T + " ADD COLUMN interval_unit TEXT NOT NULL DEFAULT 'HOUR'");
             db.execSQL("UPDATE " + T + " SET interval_amount = interval_hours, interval_unit = 'HOUR'");
         }
+        if (oldVersion < 3) {
+            db.execSQL("ALTER TABLE " + T + " ADD COLUMN once INTEGER NOT NULL DEFAULT 0");
+        }
     }
 
-    public long insert(String text, Interval interval) {
+    public long insert(String text, Interval interval, boolean once) {
         ContentValues v = new ContentValues();
         v.put("text", text);
         v.put("interval_hours", (int) Math.max(1, interval.approxSeconds() / 3600));
         v.put("interval_amount", interval.amount);
         v.put("interval_unit", interval.unit);
+        v.put("once", once ? 1 : 0);
         v.put("done", 0);
         v.put("created_at", System.currentTimeMillis());
         v.put("next_at", 0);
@@ -86,11 +91,12 @@ public class TodoDb extends SQLiteOpenHelper {
         update(id, v);
     }
 
-    public void setInterval(long id, Interval interval) {
+    public void setInterval(long id, Interval interval, boolean once) {
         ContentValues v = new ContentValues();
         v.put("interval_hours", (int) Math.max(1, interval.approxSeconds() / 3600));
         v.put("interval_amount", interval.amount);
         v.put("interval_unit", interval.unit);
+        v.put("once", once ? 1 : 0);
         update(id, v);
     }
 
@@ -111,7 +117,7 @@ public class TodoDb extends SQLiteOpenHelper {
     private List<Todo> query(String where, String[] args, String orderBy) {
         List<Todo> out = new ArrayList<>();
         try (Cursor c = getReadableDatabase().query(T,
-                new String[]{"id", "text", "interval_amount", "interval_unit", "done", "created_at", "next_at"},
+                new String[]{"id", "text", "interval_amount", "interval_unit", "once", "done", "created_at", "next_at"},
                 where, args, null, null, orderBy)) {
             while (c.moveToNext()) {
                 out.add(new Todo(
@@ -119,8 +125,9 @@ public class TodoDb extends SQLiteOpenHelper {
                         c.getString(1),
                         Interval.of(c.getInt(2), c.getString(3)),
                         c.getInt(4) == 1,
-                        c.getLong(5),
-                        c.getLong(6)));
+                        c.getInt(5) == 1,
+                        c.getLong(6),
+                        c.getLong(7)));
             }
         }
         return out;

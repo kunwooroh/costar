@@ -12,6 +12,16 @@
         android:paddingEnd="22dp"
         android:paddingBottom="4dp">
 
+        <CheckBox
+            android:id="@+id/check_once"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:buttonTint="@color/brand"
+            android:text="@string/once_label"
+            android:textColor="@color/text_main"
+            android:textSize="15sp" />
+
         <TextView
             style="@style/SectionLabel"
             android:text="@string/preset_label" />
@@ -48,6 +58,7 @@
                 android:descendantFocusability="blocksDescendants" />
 
             <TextView
+                android:id="@+id/suffix"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="12dp"

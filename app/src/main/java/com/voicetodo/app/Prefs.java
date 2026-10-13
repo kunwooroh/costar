@@ -10,6 +10,7 @@ public final class Prefs {
     private static final String K_AMOUNT = "default_amount";
     private static final String K_UNIT = "default_unit";
     private static final String K_START = "default_start";
+    private static final String K_ONCE = "default_once";
 
     private Prefs() {}
 
@@ -23,8 +24,13 @@ public final class Prefs {
         return sp(ctx).getLong(K_START, 0L);
     }
 
-    public static void setDefault(Context ctx, Interval interval, long startAt) {
+    public static boolean defaultOnce(Context ctx) {
+        return sp(ctx).getBoolean(K_ONCE, false);
+    }
+
+    public static void setDefault(Context ctx, Interval interval, long startAt, boolean once) {
         sp(ctx).edit()
+                .putBoolean(K_ONCE, once)
                 .putInt(K_AMOUNT, interval.amount)
                 .putString(K_UNIT, interval.unit)
                 .putLong(K_START, startAt)

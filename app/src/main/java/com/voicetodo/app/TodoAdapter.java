@@ -61,8 +61,14 @@ public class TodoAdapter extends BaseAdapter {
         } else {
             text.setPaintFlags(text.getPaintFlags() & ~Paint.STRIKE_THRU_TEXT_FLAG);
             text.setAlpha(1f);
-            String label = "🔔 " + t.interval.label();
-            if (t.nextAt > 0) label += " · 다음 " + TimeFmt.format(t.nextAt);
+            String label;
+            if (t.once) {
+                label = t.nextAt > 0 ? "⏰ 한 번 알림 · " + TimeFmt.format(t.nextAt)
+                        : "⏰ 알림 울림 · 체크해서 완료";
+            } else {
+                label = "🔔 " + t.interval.label();
+                if (t.nextAt > 0) label += " · 다음 " + TimeFmt.format(t.nextAt);
+            }
             meta.setText(label);
         }
 

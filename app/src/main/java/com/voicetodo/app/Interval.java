@@ -72,6 +72,19 @@ public final class Interval {
         }
     }
 
+    /** 길이 표현: "30초", "6시간", "하루", "3일", "1주", "2개월" */
+    public String durationLabel() {
+        switch (unit) {
+            case SEC: return amount + "초";
+            case MIN: return amount + "분";
+            case DAY: return amount == 1 ? "하루" : amount + "일";
+            case WEEK: return amount == 1 ? "일주일" : amount + "주";
+            case MONTH: return amount == 1 ? "한 달" : amount + "개월";
+            case HOUR:
+            default: return amount + "시간";
+        }
+    }
+
     @Override
     public boolean equals(Object o) {
         if (!(o instanceof Interval)) return false;

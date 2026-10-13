@@ -15,4 +15,5 @@
     <string name="pick_start">📅 날짜·시간</string>
     <string name="reset_start">↺ 등록 시점부터로 되돌리기</string>
     <string name="change">변경</string>
+    <string name="once_label">⏰ 반복 없이 한 번만 알림</string>
 </resources>
