@@ -19,10 +19,9 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - uses: android-actions/setup-android@v3
-
       - name: Build APK
         run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
           cp app/build/outputs/apk/release/app-release.apk VoiceTodo.apk
